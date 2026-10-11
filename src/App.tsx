@@ -20,6 +20,8 @@ import { SavedStrategyPage } from './pages/dashboard/SavedStrategyPage';
 import { ContentCreationPage } from './pages/dashboard/ContentCreationPage';
 import { IdealCustomerProfilesPage } from './pages/dashboard/IdealCustomerProfilesPage';
 import { SmmStrategiesPage } from './pages/dashboard/SmmStrategiesPage';
+import { BalancePage } from './pages/dashboard/BalancePage';
+import { CheckoutPage } from './pages/CheckoutPage';
 import { supabase } from './lib/supabase';
 import { LanguageProvider } from './lib/i18n';
 
@@ -86,7 +88,9 @@ function AppContent() {
           <Route path="content" element={<ContentCreationPage />} />
           <Route path="icp" element={<IdealCustomerProfilesPage />} />
           <Route path="smm" element={<SmmStrategiesPage />} />
+          <Route path="balance" element={<BalancePage />} />
         </Route>
+        <Route path="/checkout" element={<CheckoutPage />} />
       </Routes>
     </Router>
     </LanguageProvider>

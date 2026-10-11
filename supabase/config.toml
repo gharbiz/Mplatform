@@ -10,3 +10,9 @@ verify_jwt = true
 
 [functions.find-icp-leads]
 verify_jwt = true
+
+[functions.stripe-checkout]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false

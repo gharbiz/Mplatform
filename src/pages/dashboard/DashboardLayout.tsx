@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Briefcase, Users,
-  Megaphone, PenLine, LogOut, CreditCard, ChevronDown, Menu, X,
+  Megaphone, PenLine, LogOut, CreditCard, ChevronDown, Menu, X, Wallet,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useLanguage } from '../../lib/i18n';
@@ -14,6 +14,7 @@ export function DashboardLayout() {
   const [isJourneyOpen, setIsJourneyOpen] = useState(false);
   const [counts, setCounts] = useState({ businesses: 0, strategies: 0, content: 0 });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
 
   const navItems = [
     { to: '/dashboard/businesses', icon: Briefcase, label: t('dash.myBusinesses') },
@@ -37,6 +38,16 @@ export function DashboardLayout() {
       setCounts({ businesses: b.count ?? 0, strategies: s.count ?? 0, content: c.count ?? 0 });
     };
     fetchCounts();
+  }, []);
+
+  useEffect(() => {
+    const fetchCredits = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase.from('user_credits').select('credits').eq('user_id', session.user.id).maybeSingle();
+      if (data) setCreditBalance(data.credits);
+    };
+    fetchCredits();
   }, []);
 
   const handleLogout = async () => {
@@ -92,6 +103,18 @@ export function DashboardLayout() {
         }>
           <Megaphone size={18} />
           {t('dash.smm')}
+        </NavLink>
+
+        <NavLink to="/dashboard/balance" onClick={handleNavClick} className={({ isActive }) =>
+          `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'}`
+        }>
+          <Wallet size={18} />
+          <div className="flex flex-col">
+            <span>{t('dash.balance')}</span>
+            {creditBalance !== null && (
+              <span className="text-xs text-gray-400 font-normal">{creditBalance} {t('dash.credits')}</span>
+            )}
+          </div>
         </NavLink>
       </nav>
 
