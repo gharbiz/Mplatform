@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, Download, ExternalLink, LockKeyhole, RefreshCw, Search, Share2, Sparkles, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, Download, ExternalLink, LockKeyhole, RefreshCw, Search, Share2, Sparkles, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
@@ -30,52 +30,44 @@ interface StrategyData {
   timeline?: string;
 }
 
+// v1.4 (generate-content): icp_insights is now a normalized knowledge base instead of
+// narrative paragraphs — PROSPECT, PAIN_POINTS, TRIGGERS, OBJECTIONS, each entity with
+// stable IDs and an evidence anchor, built to be consumed by an AI agent or a sales rep
+// directly, not re-parsed from prose.
+interface IcpProspect {
+  segment: string;
+  location: string;
+  decisionMakers: string[];
+  buyingSignals: string[];
+}
+interface IcpPainPoint { id: string; painPoint: string; businessImpact: string; proof: string; anchor?: string }
+interface IcpTrigger { id: string; text: string; anchor?: string }
+interface IcpObjection { id: string; objection: string; response: string; anchor?: string }
+
+interface IcpKnowledgeBase {
+  prospect: IcpProspect;
+  painPoints: IcpPainPoint[];
+  triggers: IcpTrigger[];
+  objections: IcpObjection[];
+}
+
 interface StrategyRecord {
   id: string;
   business_name: string;
   website: string;
   strategy_data: StrategyData;
-  icp_insights: InsightGroup[] | null;
+  icp_insights: IcpKnowledgeBase | null;
 }
 
-interface InsightItem {
-  title: string;
-  description: string;
-  count?: number;
+function isEstimateAnchor(anchor?: string): boolean {
+  return anchor?.trim().toLowerCase() === 'estimate';
 }
-
-interface InsightGroup {
-  title: string;
-  items: InsightItem[];
-}
-
-const FALLBACK_GROUPS: InsightGroup[] = [
-  { title: 'Customer overview', items: [{ title: 'Jobs-to-be-Done', description: 'Key tasks and responsibilities of customers' }] },
-  { title: 'Goals, challenges & motivation', items: [
-    { title: 'Problems', description: 'Challenges and roadblocks that stand in customers way' },
-    { title: 'Pain points and frustrations', description: 'How problems impact customers', count: 3 },
-    { title: 'Decision triggers', description: 'What makes customers look for a new solution', count: 2 },
-  ] },
-  { title: 'Buying behavior', items: [
-    { title: 'Alternative solutions', description: "Tools or methods solving customer's problem" },
-    { title: 'Existing knowledge', description: 'What customers already know about the issue and solutions' },
-    { title: 'Buying criteria', description: 'What customers look for when choosing a solution', count: 2 },
-  ] },
-  { title: 'Marketing and communication', items: [
-    { title: 'Best channels to reach customers', description: 'Where you can effectively engage customers', count: 1 },
-    { title: '20+ places where customers spend time', description: 'Places customers engage online and offline', count: 2 },
-    { title: 'Preferred communication channels', description: 'How customers like to connect' },
-    { title: 'Essential tools', description: 'Software and resources customers rely on' },
-    { title: 'Information sources buyer trusts', description: 'Where customers get industry insights', count: 1 },
-  ] },
-];
 
 export function IdealCustomerProfilesPage() {
   const navigate = useNavigate();
   const [strategies, setStrategies] = useState<StrategyRecord[]>([]);
   const [selectedStrategyId, setSelectedStrategyId] = useState('');
-  const [insights, setInsights] = useState<InsightGroup[]>([]);
-  const [expandedInsight, setExpandedInsight] = useState<string | null>(null);
+  const [kb, setKb] = useState<IcpKnowledgeBase | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -103,7 +95,7 @@ export function IdealCustomerProfilesPage() {
         setStrategies(records);
         if (records[0]) {
           setSelectedStrategyId(records[0].id);
-          setInsights(records[0].icp_insights ?? []);
+          setKb(records[0].icp_insights ?? null);
         }
       }
       setIsLoading(false);
@@ -113,8 +105,7 @@ export function IdealCustomerProfilesPage() {
 
   useEffect(() => {
     if (!selectedStrategy) return;
-    setInsights(selectedStrategy.icp_insights ?? []);
-    setExpandedInsight(null);
+    setKb(selectedStrategy.icp_insights ?? null);
     setRealLeads(null);
     setLeadsError('');
   }, [selectedStrategy]);
@@ -138,14 +129,19 @@ export function IdealCustomerProfilesPage() {
         body: JSON.stringify({ mode: 'icp_insights', strategy: selectedStrategy.strategy_data }),
       });
       const result = await response.json();
-      if (!response.ok || !Array.isArray(result.groups) || result.groups.length === 0) {
+      if (!response.ok || !result.prospect || !Array.isArray(result.painPoints)) {
         throw new Error('Invalid insights response');
       }
-      const generatedGroups = result.groups as InsightGroup[];
-      setInsights(generatedGroups);
-      await supabase.from('marketing_strategies').update({ icp_insights: generatedGroups }).eq('id', selectedStrategy.id);
+      const generatedKb: IcpKnowledgeBase = {
+        prospect: result.prospect,
+        painPoints: result.painPoints ?? [],
+        triggers: result.triggers ?? [],
+        objections: result.objections ?? [],
+      };
+      setKb(generatedKb);
+      await supabase.from('marketing_strategies').update({ icp_insights: generatedKb }).eq('id', selectedStrategy.id);
       setStrategies(previous => previous.map(strategy => strategy.id === selectedStrategy.id
-        ? { ...strategy, icp_insights: generatedGroups }
+        ? { ...strategy, icp_insights: generatedKb }
         : strategy));
     } catch {
       setError('Elsa could not generate the customer insights. Please try again.');
@@ -183,8 +179,6 @@ export function IdealCustomerProfilesPage() {
     }
   };
 
-  const displayGroups = insights.length > 0 ? insights : FALLBACK_GROUPS;
-  const insightCount = displayGroups.reduce((total, group) => total + group.items.length, 0);
   const segment = icp?.demographics || 'Your ideal customer segment';
   const persona = icp?.psychographics || 'Your key decision-maker and buyer persona';
   const companyProfile = icp?.description?.overview || 'Key firmographic details of the ideal customer';
@@ -265,10 +259,10 @@ export function IdealCustomerProfilesPage() {
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <p className="text-sm text-gray-600">This is your free ICP. Elsa uses your strategy to reveal the customer insights below.</p>
+        <p className="text-sm text-gray-600">This is your free ICP. Elsa uses your strategy to build an actionable knowledge base below.</p>
         <button onClick={generateInsights} disabled={isGenerating} className="flex items-center justify-center gap-2 px-5 py-3 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap">
           {isGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {isGenerating ? 'Elsa is thinking...' : insights.length > 0 ? 'Refresh insights' : 'Generate insights'}
+          {isGenerating ? 'Elsa is thinking...' : kb ? 'Refresh knowledge base' : 'Generate knowledge base'}
         </button>
       </div>
 
@@ -282,40 +276,115 @@ export function IdealCustomerProfilesPage() {
 
       {error && <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm">{error}</div>}
 
-      <div className="mb-5">
-        <h2 className="text-lg font-bold text-blue-700">Elsa found {insightCount} customer insights!</h2>
-        <p className="text-sm text-blue-600 mt-1">Insights help refine your marketing strategy, strengthen positioning, and deepen customer understanding to drive growth.</p>
-      </div>
+      {kb ? (
+        <>
+          <div className="mb-5">
+            <h2 className="text-lg font-bold text-blue-700">Base de connaissances ICP</h2>
+            <p className="text-sm text-blue-600 mt-1">Structurée pour être utilisée directement par vos agents IA ou votre équipe commerciale — pas de prose à ré-interpréter.</p>
+          </div>
 
-      <div className="border-t border-gray-200">
-        {displayGroups.map(group => (
-          <section key={group.title} className="py-6 border-b border-gray-200">
-            <div className="flex items-center gap-3 mb-4">
-              <h3 className="text-base font-bold text-gray-900">{group.title}</h3>
-              <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs font-semibold">{group.items.length} {group.items.length === 1 ? 'insight' : 'insights'}</span>
+          {/* PROSPECT */}
+          <section className="py-6 border-t border-gray-200">
+            <h3 className="text-base font-bold text-gray-900 mb-4">Prospect (ICP)</h3>
+            <div className="grid sm:grid-cols-2 gap-4 mb-4">
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Segment</p>
+                <p className="text-sm text-gray-800">{kb.prospect.segment}</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Localisation</p>
+                <p className="text-sm text-gray-800">{kb.prospect.location}</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              {group.items.map(item => {
-                const key = `${group.title}-${item.title}`;
-                const isExpanded = expandedInsight === key;
-                return (
-                  <div key={key} className="rounded-xl bg-gray-100 overflow-hidden">
-                    <button onClick={() => setExpandedInsight(isExpanded ? null : key)} className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-200 transition-colors">
-                      <span className="font-semibold text-gray-900 text-sm">{item.title}</span>
-                      <span className="text-sm text-gray-500 flex-1 truncate">{item.description}</span>
-                      {item.count && <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">{item.count}</span>}
-                      <span className="flex items-center gap-1 text-xs font-semibold text-gray-700 ml-2 flex-shrink-0"><span className="hidden sm:inline">{isExpanded ? 'Close' : 'View'}</span>{isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</span>
-                    </button>
-                    {isExpanded && <div className="px-4 pb-4 pt-1 text-sm text-gray-700 leading-relaxed bg-gray-50">{item.description}</div>}
-                  </div>
-                );
-              })}
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Décideur</p>
+              <div className="flex flex-wrap gap-2">
+                {kb.prospect.decisionMakers?.map((d, i) => (
+                  <span key={i} className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full">{d}</span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Signal d'intérêt</p>
+              <ul className="space-y-1">
+                {kb.prospect.buyingSignals?.map((s, i) => <li key={i} className="text-sm text-gray-700">• {s}</li>)}
+              </ul>
             </div>
           </section>
-        ))}
-      </div>
 
-      <div className="mt-6 flex items-center gap-2 text-xs text-gray-400"><LockKeyhole size={13} /> Insights are generated from your saved strategy and remain private to your account.</div>
+          {/* PAIN_POINTS */}
+          <section className="py-6 border-t border-gray-200">
+            <h3 className="text-base font-bold text-gray-900 mb-4">Pain points</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                    <th className="py-2 pr-4">ID</th>
+                    <th className="py-2 pr-4">Pain point</th>
+                    <th className="py-2 pr-4">Impact business</th>
+                    <th className="py-2">Preuve associée</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kb.painPoints.map(pp => (
+                    <tr key={pp.id} className="border-b border-gray-50 last:border-0 align-top">
+                      <td className="py-2.5 pr-4 font-mono text-xs text-gray-500 whitespace-nowrap">{pp.id}</td>
+                      <td className="py-2.5 pr-4 font-medium text-gray-900">{pp.painPoint}</td>
+                      <td className="py-2.5 pr-4 text-gray-700">{pp.businessImpact}</td>
+                      <td className="py-2.5 text-gray-600">
+                        {pp.proof}
+                        {isEstimateAnchor(pp.anchor) && <span className="ml-2 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">estimation</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* TRIGGERS */}
+          <section className="py-6 border-t border-gray-200">
+            <h3 className="text-base font-bold text-gray-900 mb-4">Triggers (déclencheurs de décision)</h3>
+            <div className="space-y-2">
+              {kb.triggers.map(t => (
+                <div key={t.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                  <span className="font-mono text-xs text-gray-400 mt-0.5 flex-shrink-0">{t.id}</span>
+                  <p className="text-sm text-gray-800">
+                    {t.text}
+                    {isEstimateAnchor(t.anchor) && <span className="ml-2 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">estimation</span>}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* OBJECTIONS */}
+          <section className="py-6 border-t border-gray-200">
+            <h3 className="text-base font-bold text-gray-900 mb-4">Objections (et réponses associées)</h3>
+            <div className="space-y-3">
+              {kb.objections.map(o => (
+                <div key={o.id} className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm font-semibold text-gray-900">
+                    <span className="font-mono text-xs text-gray-400 mr-2">{o.id}</span>
+                    « {o.objection} »
+                  </p>
+                  <p className="text-sm text-gray-700 mt-1.5 pl-1 border-l-2 border-blue-200">
+                    → {o.response}
+                    {isEstimateAnchor(o.anchor) && <span className="ml-2 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">estimation</span>}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : !isGenerating ? (
+        <div className="py-12 text-center border-t border-gray-200">
+          <Sparkles size={32} className="text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Aucune base de connaissances générée pour le moment.</p>
+        </div>
+      ) : null}
+
+      <div className="mt-6 flex items-center gap-2 text-xs text-gray-400"><LockKeyhole size={13} /> Generated from your saved strategy and remains private to your account.</div>
     </div>
   );
 }
