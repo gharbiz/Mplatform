@@ -2,7 +2,19 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 /**
- * generate-content — v1.3 (named-sector TAM with real search + capacity-capped SOM)
+ * generate-content — v1.4 (icp_insights becomes a normalized knowledge base)
+ * ---------------------------------------------------------------------------------------
+ * v1.4: "icp_insights" mode no longer returns 12 narrative paragraphs in 4 fixed groups.
+ * It now returns a normalized knowledge base — prospect{segment,location,decisionMakers,
+ * buyingSignals}, painPoints[] (id PP-NN, painPoint, businessImpact, proof, anchor),
+ * triggers[] (id T-NN, text, anchor), objections[] (id O-NN, objection, response, anchor) —
+ * built for an AI agent or a sales rep to act on directly rather than re-parsing prose each
+ * time. See buildIcpKnowledgeBasePrompt() and validateIcpKnowledgeBase(). This is a BREAKING
+ * CHANGE to icp_insights' output shape — IdealCustomerProfilesPage.tsx's rendering must be
+ * updated together with this file (old saved icp_insights with the {groups:[...]} shape
+ * will no longer render correctly; regenerate them from the page once both are deployed).
+ *
+ * v1.3 (named-sector TAM with real search + capacity-capped SOM):
  * ---------------------------------------------------------------------------------------
  * v1.3 changes on top of v1.2, directly addressing "le potentiel est très loin du compte":
  *
@@ -420,6 +432,68 @@ Marketing strategy:
 ${strategy}`;
 }
 
+// v1.4: turns the ICP's narrative insights into a normalized knowledge base an AI agent (or
+// a sales rep) can act on directly — PROSPECT, PAIN_POINTS (with business impact + proof),
+// TRIGGERS, OBJECTIONS (with ready responses) — instead of free-text paragraphs to re-parse
+// every time. Replaces the old "12 narrative insights in 4 groups" output entirely.
+function buildIcpKnowledgeBasePrompt(strategy: string): string {
+  return `You are Elsa, an expert customer research strategist. Using ONLY the complete marketing strategy below, convert this Ideal Customer Profile into a normalized, machine-readable knowledge base — structured data an AI agent or a sales rep can act on directly, not narrative paragraphs to re-read each time. Do not change, contradict, or invent business context beyond what the strategy supports.
+
+Return ONLY a JSON object with this EXACT structure (no markdown, no code fences):
+
+{
+  "prospect": {
+    "segment": "short label for the target segment (e.g. 'Concept store / Revendeur mode éthique')",
+    "location": "short label for the geography (e.g. 'France, Europe')",
+    "decisionMakers": ["3 to 5 precise job titles who decide or influence the purchase"],
+    "buyingSignals": ["2 to 4 concrete, checkable signals that a given prospect is in-market right now (a page they'd visit, an event they'd attend, a hiring signal) — never a vague statement"]
+  },
+  "painPoints": [
+    { "id": "PP-01", "painPoint": "short label for the pain", "businessImpact": "short label for the business consequence (e.g. 'Taux de retour élevé', 'Marge compressée')", "proof": "the specific proof point from the strategy that backs this pain point existing (a stat, a review count, a certification) — never a generic phrase", "anchor": "source-tagged quote from the strategy, or the exact string 'estimate'" }
+  ],
+  "triggers": [
+    { "id": "T-01", "text": "one concrete decision trigger, naming a specific proof point from the strategy (a number, a certification, a guarantee)", "anchor": "source-tagged quote, or the exact string 'estimate'" }
+  ],
+  "objections": [
+    { "id": "O-01", "objection": "the objection phrased the way the prospect would actually say it", "response": "the rebuttal, naming a specific proof point from the strategy — never a generic reassurance", "anchor": "source-tagged quote, or the exact string 'estimate'" }
+  ]
+}
+
+Rules:
+- IDs are sequential and zero-padded exactly as shown: PP-01, PP-02... / T-01, T-02... / O-01, O-02...
+- Produce exactly 5 painPoints, exactly 5 triggers, and 3 to 4 objections.
+- Every painPoint.proof, trigger.text and objection.response must name something concrete and specific from the strategy (a number, a certification, a named offer, a guarantee) — a sentence that would still be true for any competitor is not acceptable anywhere in this output.
+- "anchor" follows the same convention used elsewhere in this app: a short verbatim quote tagged with its source, or the literal string "estimate" when the strategy gives no direct evidence for that specific item.
+
+Marketing strategy:
+${strategy}`;
+}
+
+// v1.4: light structural validation for the icp_insights knowledge base, mirroring
+// validateSmmOutput's spirit — checks shape and ID formatting before trusting the output.
+function validateIcpKnowledgeBase(s: any): string[] {
+  const problems: string[] = [];
+  if (!s || typeof s !== "object") return ["root is not an object"];
+  if (typeof s.prospect?.segment !== "string" || !s.prospect.segment.trim()) problems.push("prospect.segment");
+  if (!Array.isArray(s.prospect?.decisionMakers) || s.prospect.decisionMakers.length < 2) problems.push("prospect.decisionMakers (array >= 2)");
+  if (!Array.isArray(s.prospect?.buyingSignals) || s.prospect.buyingSignals.length < 1) problems.push("prospect.buyingSignals (array >= 1)");
+
+  const checkIdArray = (arr: any, label: string, idPrefix: string, min: number, fields: string[]) => {
+    if (!Array.isArray(arr) || arr.length < min) { problems.push(`${label} (array >= ${min})`); return; }
+    const idRe = new RegExp(`^${idPrefix}-\\d{2}$`);
+    arr.forEach((item: any, i: number) => {
+      if (!item || typeof item !== "object") { problems.push(`${label}[${i}] is not an object`); return; }
+      if (typeof item.id !== "string" || !idRe.test(item.id)) problems.push(`${label}[${i}].id (expected ${idPrefix}-NN)`);
+      for (const f of fields) if (typeof item[f] !== "string" || !item[f].trim()) problems.push(`${label}[${i}].${f}`);
+      if (typeof item.anchor !== "string" || !item.anchor.trim()) problems.push(`${label}[${i}].anchor`);
+    });
+  };
+  checkIdArray(s.painPoints, "painPoints", "PP", 3, ["painPoint", "businessImpact", "proof"]);
+  checkIdArray(s.triggers, "triggers", "T", 3, ["text"]);
+  checkIdArray(s.objections, "objections", "O", 2, ["objection", "response"]);
+  return problems;
+}
+
 async function callDeepSeek(messages: { role: string; content: string }[], temperature: number, maxTokens: number): Promise<string> {
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -560,7 +634,7 @@ Deno.serve(async (req: Request) => {
     const prompt = body.mode === "smm_strategy"
       ? buildSmmPrompt(strategy, buildGroundedBlock(body.strategy), sectorBlock, businessContextBlock)
       : body.mode === "icp_insights"
-      ? `You are Elsa, an expert customer research strategist. Using only the complete marketing strategy below, generate exactly 12 customer insights for this ideal customer profile. Do not change, contradict, or invent the business context. Return ONLY a JSON object with this exact structure: {"groups":[{"title":"Customer overview","items":[{"title":"Jobs-to-be-Done","description":"...","count":1}]},{"title":"Goals, challenges & motivation","items":[{"title":"Problems","description":"..."},{"title":"Pain points and frustrations","description":"...","count":3},{"title":"Decision triggers","description":"...","count":2}]},{"title":"Buying behavior","items":[{"title":"Alternative solutions","description":"..."},{"title":"Existing knowledge","description":"..."},{"title":"Buying criteria","description":"...","count":2}]},{"title":"Marketing and communication","items":[{"title":"Best channels to reach customers","description":"...","count":1},{"title":"20+ places where customers spend time","description":"...","count":2},{"title":"Preferred communication channels","description":"..."},{"title":"Essential tools","description":"..."},{"title":"Information sources buyer trusts","description":"...","count":1}]}]}. The four groups must contain exactly 1, 3, 3, and 5 items, for exactly 12 total. Each description should be specific, practical, and based on the ICP demographics, psychographics, pain points, goals, problems, needs, benefits, channels, tactics, and KPIs. Counts are optional small integers representing the number of concrete insights in that row. Do not use markdown or extra text.\n\nMarketing strategy:\n${strategy}`
+      ? buildIcpKnowledgeBasePrompt(strategy)
       : body.mode === "topics"
       ? `You are Elsa, an expert B2B content strategist. Create exactly 3 distinct educational content topic ideas for the business described in the strategy below. The topics must be specific, practical, credible, and suitable for a ${body.postType} post. Use all relevant business context, ideal customer profile, needs, problems, channels, tactics, and goals from the strategy. Do not invent a different business. Return ONLY a JSON array of 3 strings, with no markdown or extra text.\n\nStrategy:\n${strategy}`
       : body.mode === "drafts"
@@ -569,10 +643,42 @@ Deno.serve(async (req: Request) => {
 
     // v1.1: smm_strategy and icp_insights must stay grounded, not creative.
     const temperature = (body.mode === "smm_strategy" || body.mode === "icp_insights") ? 0.3 : 0.8;
-    const maxTokens = body.mode === "topics" ? 1200 : body.mode === "drafts" ? 10000 : body.mode === "icp_insights" ? 3000 : body.mode === "smm_strategy" ? SMM_MAX_TOKENS : 1200;
+    const maxTokens = body.mode === "topics" ? 1200 : body.mode === "drafts" ? 10000 : body.mode === "icp_insights" ? 3500 : body.mode === "smm_strategy" ? SMM_MAX_TOKENS : 1200;
 
     const rawContent = await callDeepSeek([{ role: "user", content: prompt }], temperature, maxTokens);
     const parsed = extractJsonValue(rawContent);
+
+    // v1.4: icp_insights only — validate the knowledge base shape/IDs, one corrective retry.
+    if (body.mode === "icp_insights") {
+      let kb = parsed;
+      let validation = kb ? validateIcpKnowledgeBase(kb) : ["invalid JSON"];
+      if (!kb || validation.length) {
+        const fixContent = await callDeepSeek(
+          [
+            { role: "user", content: prompt },
+            { role: "assistant", content: rawContent || "(empty)" },
+            {
+              role: "user",
+              content: kb
+                ? "The JSON you returned is invalid or incomplete. Missing/invalid paths: " + validation.join("; ") + ". Return the COMPLETE corrected JSON object only. No markdown."
+                : "Your previous answer was not valid JSON. Return ONLY the complete JSON object requested, no markdown, no code fences.",
+            },
+          ],
+          0.3,
+          maxTokens,
+        );
+        const fixedKb = extractJsonValue(fixContent);
+        if (fixedKb) {
+          const fixedProblems = validateIcpKnowledgeBase(fixedKb);
+          if (fixedProblems.length <= validation.length) { kb = fixedKb; validation = fixedProblems; }
+        }
+      }
+      if (!kb) throw new Error("Failed to parse ICP knowledge base JSON");
+      return new Response(
+        JSON.stringify({ ...(kb as object), _meta: { validationWarnings: validation, generatedAt: new Date().toISOString() } }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     if (body.mode !== "smm_strategy") {
       if (parsed === null) throw new Error("Failed to parse model output as JSON");
