@@ -63,6 +63,18 @@ function isEstimateAnchor(anchor?: string): boolean {
   return anchor?.trim().toLowerCase() === 'estimate';
 }
 
+// v1.4.1: a strategy saved BEFORE this change has icp_insights in the OLD shape
+// ({ groups: [...] }), which has no `.prospect` / `.painPoints` at all. Rendering that
+// directly as the new shape (e.g. kb.prospect.segment) throws and blanks the whole page —
+// this is what actually broke /dashboard/icp. Never trust saved data without checking its
+// shape first; fall back to "no knowledge base yet" instead of crashing.
+function isValidKb(data: unknown): data is IcpKnowledgeBase {
+  const d = data as any;
+  return !!d && typeof d === 'object'
+    && !!d.prospect && typeof d.prospect.segment === 'string'
+    && Array.isArray(d.painPoints) && Array.isArray(d.triggers) && Array.isArray(d.objections);
+}
+
 export function IdealCustomerProfilesPage() {
   const navigate = useNavigate();
   const [strategies, setStrategies] = useState<StrategyRecord[]>([]);
@@ -95,7 +107,7 @@ export function IdealCustomerProfilesPage() {
         setStrategies(records);
         if (records[0]) {
           setSelectedStrategyId(records[0].id);
-          setKb(records[0].icp_insights ?? null);
+          setKb(isValidKb(records[0].icp_insights) ? records[0].icp_insights : null);
         }
       }
       setIsLoading(false);
@@ -105,7 +117,7 @@ export function IdealCustomerProfilesPage() {
 
   useEffect(() => {
     if (!selectedStrategy) return;
-    setKb(selectedStrategy.icp_insights ?? null);
+    setKb(isValidKb(selectedStrategy.icp_insights) ? selectedStrategy.icp_insights : null);
     setRealLeads(null);
     setLeadsError('');
   }, [selectedStrategy]);
@@ -289,11 +301,11 @@ export function IdealCustomerProfilesPage() {
             <div className="grid sm:grid-cols-2 gap-4 mb-4">
               <div className="p-4 bg-gray-50 rounded-xl">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Segment</p>
-                <p className="text-sm text-gray-800">{kb.prospect.segment}</p>
+                <p className="text-sm text-gray-800">{kb.prospect?.segment ?? '—'}</p>
               </div>
               <div className="p-4 bg-gray-50 rounded-xl">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Localisation</p>
-                <p className="text-sm text-gray-800">{kb.prospect.location}</p>
+                <p className="text-sm text-gray-800">{kb.prospect?.location ?? '—'}</p>
               </div>
             </div>
             <div className="mb-4">
@@ -326,7 +338,7 @@ export function IdealCustomerProfilesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {kb.painPoints.map(pp => (
+                  {(kb.painPoints ?? []).map(pp => (
                     <tr key={pp.id} className="border-b border-gray-50 last:border-0 align-top">
                       <td className="py-2.5 pr-4 font-mono text-xs text-gray-500 whitespace-nowrap">{pp.id}</td>
                       <td className="py-2.5 pr-4 font-medium text-gray-900">{pp.painPoint}</td>
@@ -346,7 +358,7 @@ export function IdealCustomerProfilesPage() {
           <section className="py-6 border-t border-gray-200">
             <h3 className="text-base font-bold text-gray-900 mb-4">Triggers (déclencheurs de décision)</h3>
             <div className="space-y-2">
-              {kb.triggers.map(t => (
+              {(kb.triggers ?? []).map(t => (
                 <div key={t.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
                   <span className="font-mono text-xs text-gray-400 mt-0.5 flex-shrink-0">{t.id}</span>
                   <p className="text-sm text-gray-800">
@@ -362,7 +374,7 @@ export function IdealCustomerProfilesPage() {
           <section className="py-6 border-t border-gray-200">
             <h3 className="text-base font-bold text-gray-900 mb-4">Objections (et réponses associées)</h3>
             <div className="space-y-3">
-              {kb.objections.map(o => (
+              {(kb.objections ?? []).map(o => (
                 <div key={o.id} className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-sm font-semibold text-gray-900">
                     <span className="font-mono text-xs text-gray-400 mr-2">{o.id}</span>
