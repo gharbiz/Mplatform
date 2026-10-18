@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Briefcase, Users,
-  Megaphone, PenLine, LogOut, CreditCard, ChevronDown, Menu, X, Wallet,
+  Megaphone, PenLine, LogOut, CreditCard, ChevronDown, Menu, X, Wallet, Network,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useLanguage } from '../../lib/i18n';
