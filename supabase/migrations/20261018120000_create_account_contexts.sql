@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS public.account_contexts (
   last_synced_at timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT account_contexts_user_clay_profile_unique UNIQUE (user_id, clay_profile_id)
+  CONSTRAINT account_contexts_user_clay_profile_unique UNIQUE (user_id, strategy_id, clay_profile_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_account_contexts_user_id ON public.account_contexts(user_id);
