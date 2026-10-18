@@ -73,8 +73,8 @@ function deriveContext(strategy: StrategyRecord, lead: ClayLead) {
     ...needs.map(item => item.title + (item.fulfillment ? ': ' + item.fulfillment : '')),
   ]);
   const proofs = unique([
-    ...asStrings(description.capabilities),
-    ...asStrings(description.differentiation),
+    ...asStrings(asRecord(data).proofs),
+    ...asStrings(asRecord(data).evidence),
     ...insightPainPoints.map(item => asText(item.proof)).filter(value => value && value.toLowerCase() !== 'estimate'),
   ]);
   const experience = (lead.matched_experiences ?? []).filter(item => item.company || item.title);
@@ -183,7 +183,7 @@ export function AccountContextBuilderPage() {
         updated_at: new Date().toISOString(),
       }));
       if (!records.length) throw new Error('Clay a retourné des contacts sans identifiant stable. Aucun compte n’a été enregistré.');
-      const { error: saveError } = await supabase.from('account_contexts').upsert(records, { onConflict: 'user_id,clay_profile_id' });
+      const { error: saveError } = await supabase.from('account_contexts').upsert(records, { onConflict: 'user_id,strategy_id,clay_profile_id' });
       if (saveError) {
         if (saveError.code === '42P01' || saveError.message.includes('account_contexts')) {
           throw new Error('La table account_contexts n’existe pas encore dans Supabase. Appliquez la migration du module avant de synchroniser.');
@@ -270,8 +270,9 @@ export function AccountContextBuilderPage() {
                 const context = deriveContext(selectedStrategy, lead);
                 const expanded = expandedId === account.id;
                 const name = lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Contact sans nom';
-                const company = context.experience.find(item => item.company)?.company || 'Entreprise à vérifier';
-                const title = context.experience.find(item => item.title)?.title || 'Fonction à vérifier';
+                const currentExperience = context.experience.find(item => !item.end_date) ?? context.experience[0];
+                const company = currentExperience?.company || 'Entreprise à vérifier';
+                const title = currentExperience?.title || 'Fonction à vérifier';
                 return (
                   <article key={account.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
                     <div className="w-full px-4 sm:px-5 py-4 flex items-center gap-3 hover:bg-gray-50">
