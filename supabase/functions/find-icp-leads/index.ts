@@ -1,23 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const STATIC_ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "";
-function buildCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || req.headers.get("origin") || "";
-  let allowOrigin = STATIC_ALLOWED_ORIGIN || "*";
-  if (origin) {
-    const isConfigured = STATIC_ALLOWED_ORIGIN && origin === STATIC_ALLOWED_ORIGIN;
-    const isWebContainerPreview = /^https:\/\/[a-z0-9.-]+\.webcontainer-api\.io$/i.test(origin);
-    const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-    if (isConfigured || isWebContainerPreview || isLocalDev) allowOrigin = origin;
-  }
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-    "Vary": "Origin",
-  };
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
 
 const MAX_SAFE_LIMIT = 20;
 const DEFAULT_RESULT_LIMIT = 10;
@@ -192,7 +180,6 @@ Return ONLY this JSON, no markdown: {"query": "the corrected query string"}`;
 }
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = buildCorsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

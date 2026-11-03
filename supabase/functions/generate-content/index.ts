@@ -100,27 +100,11 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
  * each tier and `som.contributions` / `*Anchor` fields as a "to validate" badge.
  */
 
-const STATIC_ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || ""; // e.g. https://mplateform.netlify.app
-
-// v1.4: a single static origin breaks dev previews — bolt.new/WebContainer preview URLs
-// (*.webcontainer-api.io) change every session, so hardcoding one exact value locks out
-// every preview after the first. See generate-strategy.ts v2.6 for the full rationale.
-function buildCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || req.headers.get("origin") || "";
-  let allowOrigin = STATIC_ALLOWED_ORIGIN || "*";
-  if (origin) {
-    const isConfigured = STATIC_ALLOWED_ORIGIN && origin === STATIC_ALLOWED_ORIGIN;
-    const isWebContainerPreview = /^https:\/\/[a-z0-9.-]+\.webcontainer-api\.io$/i.test(origin);
-    const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-    if (isConfigured || isWebContainerPreview || isLocalDev) allowOrigin = origin;
-  }
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-    "Vary": "Origin",
-  };
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
 
 const DAILY_CONTENT_QUOTA = 150; // v1.1: separate, higher-volume quota than generate-strategy
 const SMM_MAX_TOKENS = 5000; // v1.1: bumped from 4000 — anchors + contributions add tokens
@@ -518,7 +502,6 @@ async function callDeepSeek(messages: { role: string; content: string }[], tempe
 }
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = buildCorsHeaders(req); // v1.4: per-request, see buildCorsHeaders above
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
