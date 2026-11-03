@@ -98,7 +98,7 @@ export function IdealCustomerProfilesPage() {
     const loadStrategies = async () => {
       const { data, error: queryError } = await supabase
         .from('marketing_strategies')
-        .select('id, business_name, website, strategy_data, icp_insights')
+        .select('id, business_name, website, strategy_data, icp_insights, businesses!inner(id)')
         .order('created_at', { ascending: false });
       if (queryError) {
         setError('Unable to load your marketing strategies.');
