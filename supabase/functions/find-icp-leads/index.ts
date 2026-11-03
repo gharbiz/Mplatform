@@ -20,7 +20,7 @@ function buildCorsHeaders(req: Request): Record<string, string> {
 }
 
 const MAX_SAFE_LIMIT = 20;
-const DEFAULT_RESULT_LIMIT = 2;
+const DEFAULT_RESULT_LIMIT = 10;
 const DAILY_QUOTA = 10;
 
 function envFirst(names: string[]): string | undefined {
@@ -132,6 +132,7 @@ CRITICAL RULES:
 - Copy enum values EXACTLY as they appear in the reference, including capitalization and hyphenation. For example, if the reference says "C-suite", write "C-suite" — NOT "C-Suite", "C suite", or "CSuite".
 - Do not paraphrase, reformat, or "fix" any field name or enum value from the reference.
 - If you are unsure whether a value is valid, omit the filter rather than guessing.
+- Use ONLY basic person-level filters (job title, seniority, location). Do NOT use company attributes (industry, company size, company name) or any advanced / cross-entity filter: they require a paid Clay plan and the search is rejected with 403.
 
 Return ONLY this JSON, no markdown: {"query": "the complete query string"}`;
 
@@ -169,7 +170,7 @@ ${previousQuery}
 === CLAY QUERY-MODE REFERENCE (live, authoritative) ===
 ${referenceText.slice(0, 12000)}
 
-Fix the query so it passes Clay's validation. The error tells you exactly what is wrong — typically a wrong enum value or an invalid field name. Copy the correct value EXACTLY from the reference above, preserving capitalization and hyphenation.
+Fix the query so it passes Clay's validation. The error tells you exactly what is wrong — typically a wrong enum value or an invalid field name. Copy the correct value EXACTLY from the reference above, preserving capitalization and hyphenation. Use ONLY basic person-level filters (job title, seniority, location): no company attributes and no advanced or cross-entity filters, which require a paid Clay plan.
 
 SEGMENT:
 ${segment}

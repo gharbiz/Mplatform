@@ -176,8 +176,8 @@ export function IdealCustomerProfilesPage() {
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        // limit: 2 — the function hard-caps at 20 regardless, this just states the actual need
-        body: JSON.stringify({ segment: icp.demographics, persona: icp.psychographics, limit: 2 }),
+        // limit: 10 — the function hard-caps at 20 regardless, this just states the actual need
+        body: JSON.stringify({ segment: icp.demographics, persona: icp.psychographics, limit: 10 }),
       });
       const result = await response.json();
       if (!response.ok || !Array.isArray(result.results)) {
@@ -254,10 +254,10 @@ export function IdealCustomerProfilesPage() {
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap"
           >
             {isSearchingLeads ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
-            {isSearchingLeads ? 'Recherche en cours...' : realLeads ? 'Relancer la recherche' : 'Trouver 2 exemples réels'}
+            {isSearchingLeads ? 'Recherche en cours...' : realLeads ? 'Relancer la recherche' : 'Trouver 10 exemples réels'}
           </button>
         </div>
-        <p className="text-sm text-gray-500 mb-4">Recherche 2 personnes réelles correspondant au Segment et au Persona ci-dessus, à partir de votre base Clay.</p>
+        <p className="text-sm text-gray-500 mb-4">Recherche 10 personnes réelles correspondant au Segment et au Persona ci-dessus.</p>
 
         {leadsError && <div className="mb-3 p-3 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm">{leadsError}</div>}
 

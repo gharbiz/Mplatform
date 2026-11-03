@@ -1,0 +1,29 @@
+{
+  "projectId": "60568958",
+  "functions": {
+    "find-icp-leads": {
+      "hasChanged": false,
+      "hash": "49e635107f6e6482fc9430474e7002c1b6fd61c339e18d114181c53e024675a3"
+    },
+    "generate-content": {
+      "hasChanged": false,
+      "hash": "d92035afb0afeb24ed7fe2f7244b531e2dfb38d10291cb13f05ca0cdc1f1e3ca"
+    },
+    "generate-strategy": {
+      "hasChanged": false,
+      "hash": "c5926727abcd43796dffc27da8df13ddd97f7413f9406adbdacaaf66518238c2"
+    },
+    "scrape-technology": {
+      "hasChanged": false,
+      "hash": "448e81ac4215a9cbb1411770d13663d58711154b8037a52edc8e85df597b3c60"
+    },
+    "stripe-checkout": {
+      "hasChanged": false,
+      "hash": "021ac61cbead33f2083e5a45ef888eea4dccae52339f11460df1bd893778ebf7"
+    },
+    "stripe-webhook": {
+      "hasChanged": false,
+      "hash": "797e091bcb9f8911f6c1b12fcded30b9954b5ae5977150b2be46b37f088e212a"
+    }
+  }
+}
