@@ -126,13 +126,14 @@ ${segment}
 PERSONA (psychographics / buying behavior of the target buyer):
 ${persona}
 
-Infer reasonable filters (job titles, company industry, company size, geography) from the SEGMENT and PERSONA text above, strictly using fields documented in the reference above. Model the query on the reference's own examples (typically "select from people where ...").
+Infer reasonable filters (job titles, geography) from the SEGMENT and PERSONA text above, strictly using fields documented in the reference above. Job titles are NOT top-level people fields: they must sit inside an experiences block, exactly like this:
+select from people where experiences.any(is_current = true and job_title is_similar_to ("VP Sales"))
 
 CRITICAL RULES:
 - Copy enum values EXACTLY as they appear in the reference, including capitalization and hyphenation. For example, if the reference says "C-suite", write "C-suite" — NOT "C-Suite", "C suite", or "CSuite".
 - Do not paraphrase, reformat, or "fix" any field name or enum value from the reference.
 - If you are unsure whether a value is valid, omit the filter rather than guessing.
-- Use ONLY basic person-level filters (job title, seniority, location). Do NOT use company attributes (industry, company size, company name) or any advanced / cross-entity filter: they require a paid Clay plan and the search is rejected with 403.
+- Use ONLY the experiences.any(...) block for job titles, and never invent top-level fields such as job_title. Do NOT use company.* attributes (industry, size, technographics, name) or any cross-entity filter: they require a paid Clay plan and the search is rejected with 403.
 
 Return ONLY this JSON, no markdown: {"query": "the complete query string"}`;
 
@@ -170,7 +171,7 @@ ${previousQuery}
 === CLAY QUERY-MODE REFERENCE (live, authoritative) ===
 ${referenceText.slice(0, 12000)}
 
-Fix the query so it passes Clay's validation. The error tells you exactly what is wrong — typically a wrong enum value or an invalid field name. Copy the correct value EXACTLY from the reference above, preserving capitalization and hyphenation. Use ONLY basic person-level filters (job title, seniority, location): no company attributes and no advanced or cross-entity filters, which require a paid Clay plan.
+Fix the query so it passes Clay's validation. The error tells you exactly what is wrong — typically a wrong enum value or an invalid field name. Copy the correct value EXACTLY from the reference above, preserving capitalization and hyphenation. Job titles must sit inside experiences.any(...) (e.g. select from people where experiences.any(is_current = true and job_title is_similar_to ("VP Sales"))). Never use a top-level job_title field, and no company.* or cross-entity filters, which require a paid Clay plan.
 
 SEGMENT:
 ${segment}
