@@ -37,7 +37,6 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
  *     caller is identified as "user:<uuid>" and gets DAILY_GENERATION_QUOTA/day. Otherwise
  *     it's identified by IP as "ip:<address>" and gets the much lower ANONYMOUS_DAILY_QUOTA/
  *     day. Either way, a quota is enforced BEFORE any paid crawl/SerpApi/Apify/DeepSeek call.
- *     CORS origin is configurable via ALLOWED_ORIGIN instead of a hardcoded "*".
  *
  *  5'. CACHING REMOVED: v2.2's strategy_cache table was dead code for this app — nothing
  *     calls generate-strategy more than once per business today. Removed to cut surface
@@ -64,7 +63,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
  *   );
  *
  * New env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (both auto-injected in Supabase Edge
- * Functions), ALLOWED_ORIGIN (optional, defaults to "*" — set it in production).
+ * Functions).
  *
  * Front-end change needed (optional but recommended): in StrategyResultPage.tsx, send the
  * real session token when one exists (`session?.access_token`) instead of always sending the
@@ -83,30 +82,11 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
  * prospectingKit (see above), and an extended _meta (estimatedClaims).
  */
 
-const STATIC_ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || ""; // e.g. https://mplateform.netlify.app
-
-// v2.6: a single static origin breaks dev previews — bolt.new/WebContainer preview URLs
-// (*.webcontainer-api.io) change every session, so hardcoding one exact value locks out
-// every preview after the first. This reflects the request's own Origin header back when it
-// matches a known-safe pattern (the configured production origin, a WebContainer preview, or
-// localhost), and falls back to STATIC_ALLOWED_ORIGIN (or "*" if unset) for anything else —
-// which still blocks truly unknown origins, same intent as before, just not single-value.
-function buildCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || req.headers.get("origin") || "";
-  let allowOrigin = STATIC_ALLOWED_ORIGIN || "*";
-  if (origin) {
-    const isConfigured = STATIC_ALLOWED_ORIGIN && origin === STATIC_ALLOWED_ORIGIN;
-    const isWebContainerPreview = /^https:\/\/[a-z0-9.-]+\.webcontainer-api\.io$/i.test(origin);
-    const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-    if (isConfigured || isWebContainerPreview || isLocalDev) allowOrigin = origin;
-  }
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-    "Vary": "Origin",
-  };
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
 
 interface StrategyRequest {
   website: string;
@@ -825,7 +805,6 @@ Return ONLY the JSON object.`;
 // ---------------------------------------------------------------------------
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = buildCorsHeaders(req); // v2.6: per-request, see buildCorsHeaders above
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
