@@ -17,6 +17,7 @@ import { DashboardHomePage } from './pages/dashboard/DashboardHomePage';
 import { MyBusinessesPage } from './pages/dashboard/MyBusinessesPage';
 import { MarketingStrategiesPage } from './pages/dashboard/MarketingStrategiesPage';
 import { SavedStrategyPage } from './pages/dashboard/SavedStrategyPage';
+import { AdvancedStrategyPage } from './pages/dashboard/AdvancedStrategyPage';
 import { ContentCreationPage } from './pages/dashboard/ContentCreationPage';
 import { IdealCustomerProfilesPage } from './pages/dashboard/IdealCustomerProfilesPage';
 import { SmmStrategiesPage } from './pages/dashboard/SmmStrategiesPage';
@@ -85,6 +86,7 @@ function AppContent() {
           <Route path="businesses" element={<MyBusinessesPage />} />
           <Route path="strategies" element={<MarketingStrategiesPage />} />
           <Route path="strategies/:id" element={<SavedStrategyPage />} />
+          <Route path="strategies/:id/advanced" element={<AdvancedStrategyPage />} />
           <Route path="content" element={<ContentCreationPage />} />
           <Route path="icp" element={<IdealCustomerProfilesPage />} />
           <Route path="smm" element={<SmmStrategiesPage />} />

@@ -1,5 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  buildMarketingStrategyPrompt,
+  type MarketingStrategyLanguage,
+  validateMarketingStrategy,
+} from "./marketing-strategy.ts";
 
 /**
  * generate-content — v1.4 (icp_insights becomes a normalized knowledge base)
@@ -108,6 +113,7 @@ const corsHeaders = {
 
 const DAILY_CONTENT_QUOTA = 150; // v1.1: separate, higher-volume quota than generate-strategy
 const SMM_MAX_TOKENS = 5000; // v1.1: bumped from 4000 — anchors + contributions add tokens
+const MARKETING_STRATEGY_MAX_TOKENS = 8000; // deepseek-chat ceiling; ten modules need the room
 
 function envFirst(names: string[]): string | undefined {
   for (const n of names) {
@@ -164,12 +170,14 @@ ${strategyJson}`;
 }
 
 interface ContentRequest {
-  mode: "topics" | "drafts" | "hooks" | "icp_insights" | "smm_strategy";
+  mode: "topics" | "drafts" | "hooks" | "icp_insights" | "smm_strategy" | "marketing_strategy";
   contentType?: "educational";
   postType?: "POV" | "TIPS";
   selectedTopic?: string;
   selectedDraft?: string;
   strategy: Record<string, unknown>;
+  icpInsights?: Record<string, unknown> | null;
+  language?: MarketingStrategyLanguage;
 }
 
 // v1.1: bracket-counting extractor, replaces the regex-based extractJson. Handles a
@@ -560,13 +568,13 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json() as ContentRequest;
-    if (body.mode !== "topics" && body.mode !== "drafts" && body.mode !== "hooks" && body.mode !== "icp_insights" && body.mode !== "smm_strategy") {
+    if (body.mode !== "topics" && body.mode !== "drafts" && body.mode !== "hooks" && body.mode !== "icp_insights" && body.mode !== "smm_strategy" && body.mode !== "marketing_strategy") {
       return new Response(JSON.stringify({ error: "Invalid generation mode" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!body.strategy) {
       return new Response(JSON.stringify({ error: "A strategy is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (body.mode !== "icp_insights" && body.mode !== "smm_strategy" && body.contentType !== "educational") {
+    if (body.mode !== "icp_insights" && body.mode !== "smm_strategy" && body.mode !== "marketing_strategy" && body.contentType !== "educational") {
       return new Response(JSON.stringify({ error: "Supported content type is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if ((body.mode === "drafts" || body.mode === "hooks") && (!body.selectedTopic || !body.postType)) {
@@ -616,6 +624,8 @@ Deno.serve(async (req: Request) => {
     // The other four modes keep their original prompts, verbatim.
     const prompt = body.mode === "smm_strategy"
       ? buildSmmPrompt(strategy, buildGroundedBlock(body.strategy), sectorBlock, businessContextBlock)
+      : body.mode === "marketing_strategy"
+      ? buildMarketingStrategyPrompt(strategy, JSON.stringify(body.icpInsights ?? {}), body.language === "en" ? "en" : "fr")
       : body.mode === "icp_insights"
       ? buildIcpKnowledgeBasePrompt(strategy)
       : body.mode === "topics"
@@ -625,11 +635,42 @@ Deno.serve(async (req: Request) => {
         : `You are Elsa, an expert B2B content editor. Generate exactly 3 short, strong opening hooks for the selected draft below. Hooks must be different, specific to the business and topic, and suitable for the first two lines of a ${body.postType} post. Return ONLY a JSON array of 3 strings, with no markdown or extra text.\n\nSelected topic: ${body.selectedTopic}\n\nSelected draft:\n${body.selectedDraft}\n\nStrategy:\n${strategy}`;
 
     // v1.1: smm_strategy and icp_insights must stay grounded, not creative.
-    const temperature = (body.mode === "smm_strategy" || body.mode === "icp_insights") ? 0.3 : 0.8;
-    const maxTokens = body.mode === "topics" ? 1200 : body.mode === "drafts" ? 10000 : body.mode === "icp_insights" ? 3500 : body.mode === "smm_strategy" ? SMM_MAX_TOKENS : 1200;
+    const temperature = (body.mode === "smm_strategy" || body.mode === "icp_insights" || body.mode === "marketing_strategy") ? 0.3 : 0.8;
+    const maxTokens = body.mode === "topics" ? 1200 : body.mode === "drafts" ? 10000 : body.mode === "icp_insights" ? 3500 : body.mode === "smm_strategy" ? SMM_MAX_TOKENS : body.mode === "marketing_strategy" ? MARKETING_STRATEGY_MAX_TOKENS : 1200;
 
     const rawContent = await callDeepSeek([{ role: "user", content: prompt }], temperature, maxTokens);
     const parsed = extractJsonValue(rawContent);
+
+    if (body.mode === "marketing_strategy") {
+      let strategyOutput = parsed;
+      let validation = strategyOutput ? validateMarketingStrategy(strategyOutput) : ["invalid JSON"];
+      if (!strategyOutput || validation.length) {
+        const fixContent = await callDeepSeek(
+          [
+            { role: "user", content: prompt },
+            { role: "assistant", content: rawContent || "(empty)" },
+            {
+              role: "user",
+              content: strategyOutput
+                ? "The JSON you returned is invalid or incomplete. Problems: " + validation.join("; ") + ". Return the COMPLETE corrected JSON object only. No markdown."
+                : "Your previous answer was not valid JSON. Return ONLY the complete JSON object requested, no markdown, no code fences.",
+            },
+          ],
+          0.3,
+          MARKETING_STRATEGY_MAX_TOKENS,
+        );
+        const fixedOutput = extractJsonValue(fixContent);
+        if (fixedOutput) {
+          const fixedProblems = validateMarketingStrategy(fixedOutput);
+          if (fixedProblems.length <= validation.length) { strategyOutput = fixedOutput; validation = fixedProblems; }
+        }
+      }
+      if (!strategyOutput) throw new Error("Failed to parse marketing strategy JSON");
+      return new Response(
+        JSON.stringify({ ...(strategyOutput as object), _meta: { validationWarnings: validation, generatedAt: new Date().toISOString() } }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // v1.4: icp_insights only — validate the knowledge base shape/IDs, one corrective retry.
     if (body.mode === "icp_insights") {

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, Trash2, Globe, Calendar } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Download, Share2, Trash2, Globe, Calendar } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../lib/i18n';
 
 interface IcpDescription {
   overview: string;
@@ -77,6 +78,7 @@ interface SavedStrategyRow {
 export function SavedStrategyPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [row, setRow] = useState<SavedStrategyRow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,6 +263,9 @@ export function SavedStrategyPage() {
           <ArrowLeft size={20} /> Back to strategies
         </button>
         <div className="flex gap-2">
+          <button onClick={() => navigate(`/dashboard/strategies/${id}/advanced`)} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors">
+            {t('adv.open')} <ArrowRight size={16} />
+          </button>
           <button onClick={handleDelete} className="p-2.5 bg-white border border-gray-200 hover:bg-red-50 rounded-xl transition-colors" title="Delete strategy">
             <Trash2 size={18} className="text-red-500" />
           </button>
