@@ -38,13 +38,6 @@ export function MyBusinessesPage() {
 
   useEffect(() => { fetchBusinesses(); }, []);
 
-  const openAdd = () => {
-    setEditTarget(null);
-    setForm({ name: '', website: '', business_model: '', geographic_market: '' });
-    setError('');
-    setShowModal(true);
-  };
-
   const openEdit = (b: Business) => {
     setEditTarget(b);
     setForm({ name: b.name, website: b.website, business_model: b.business_model, geographic_market: b.geographic_market });
@@ -53,14 +46,11 @@ export function MyBusinessesPage() {
   };
 
   const handleSave = async () => {
+    if (!editTarget) return;
     if (!form.name.trim() || !form.website.trim()) { setError(t('biz.nameWebsiteRequired')); return; }
     setSaving(true);
     setError('');
-    if (editTarget) {
-      await supabase.from('businesses').update(form).eq('id', editTarget.id);
-    } else {
-      await supabase.from('businesses').insert(form);
-    }
+    await supabase.from('businesses').update(form).eq('id', editTarget.id);
     setSaving(false);
     setShowModal(false);
     fetchBusinesses();
@@ -96,7 +86,7 @@ export function MyBusinessesPage() {
     <div className="p-5 sm:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
         <h1 className="text-2xl font-bold text-gray-900">{t('biz.title')}</h1>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-xl transition-colors">
+        <button onClick={() => navigate('/strategy')} className="flex items-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-xl transition-colors">
           <Plus size={18} />
           {t('biz.addNew')}
         </button>
@@ -149,7 +139,7 @@ export function MyBusinessesPage() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-900">{editTarget ? t('biz.edit') : t('biz.addNew')}</h2>
+              <h2 className="text-lg font-bold text-gray-900">{t('biz.edit')}</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
                 <X size={20} className="text-gray-500" />
               </button>
@@ -184,7 +174,7 @@ export function MyBusinessesPage() {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">{t('biz.cancel')}</button>
               <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition-colors">
-                {saving ? t('biz.saving') : editTarget ? t('biz.saveChanges') : t('biz.add')}
+                {saving ? t('biz.saving') : t('biz.saveChanges')}
               </button>
             </div>
           </div>

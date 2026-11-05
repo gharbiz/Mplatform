@@ -88,6 +88,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+interface LeadLossDiagnostic {
+  diagnosticId?: string;
+  companyName?: string;
+  leadsPerMonth?: number | null;
+  clientsPerMonth?: number | null;
+  conversionRate?: number | null;
+  margin?: number | null;
+  averageSaleValue?: number | null;
+  frictions?: string[];
+  estimatedRecovery?: number | null;
+}
+
+function buildLeadLossBlock(d: LeadLossDiagnostic | null | undefined): string {
+  if (!d) return "";
+  const frictions = (d.frictions ?? []).filter((f) => typeof f === "string" && f.trim()).slice(0, 12);
+  return [
+    "=== LEADLOSS DIAGNOSTIC (uploaded by the company - real measured metrics) ===",
+    "Leads entrants / mois: " + (d.leadsPerMonth ?? "unknown"),
+    "Clients obtenus / mois: " + (d.clientsPerMonth ?? "unknown"),
+    "Taux de conversion actuel: " + (d.conversionRate != null ? d.conversionRate + "%" : "unknown"),
+    "Marge contributive moyenne: " + (d.margin != null ? d.margin + " EUR" : "unknown"),
+    "Valeur moyenne d'une vente: " + (d.averageSaleValue != null ? d.averageSaleValue + " EUR" : "unknown"),
+    "Valeur estimee de recuperation: " + (d.estimatedRecovery != null ? d.estimatedRecovery + " EUR / mois" : "unknown"),
+    "Confirmed frictions to address first:",
+    frictions.length ? frictions.map((f, i) => (i + 1) + ". " + f).join("\n") : "(none listed)",
+    "INSTRUCTIONS: prioritise these frictions; use these measured metrics instead of estimates (mark them with anchor 'diagnostic'); base the recovery potential on the estimated recovery value; give one specific corrective action per friction; estimate impact from these metrics and prioritise with ICE/RICE when data allows.",
+  ].join("\n");
+}
+
 interface StrategyRequest {
   website: string;
   businessName: string;
@@ -109,6 +138,7 @@ interface StrategyRequest {
   scanConsent?: boolean;
   enableSerp?: boolean;
   enableLinkedIn?: boolean;
+  leadLossDiagnostic?: LeadLossDiagnostic | null;
   // pipeline control
   siteAnalysisOverride?: unknown;
   onlyAnalysis?: boolean;
@@ -906,6 +936,7 @@ Deno.serve(async (req: Request) => {
       .filter(([, v]) => v && String(v).trim())
       .map(([k, v]) => k + ": " + String(v).trim())
       .join("\n");
+    const leadLossBlock = buildLeadLossBlock(body.leadLossDiagnostic);
     const formBlock = [
       "Business name: " + businessName,
       "Website: " + website,
@@ -914,7 +945,8 @@ Deno.serve(async (req: Request) => {
       "Team size: " + teamSize,
       "Geographic market: " + geographicMarket,
       extraBlock || "(no additional fields provided)",
-    ].join("\n");
+      leadLossBlock,
+    ].filter(Boolean).join("\n");
 
     // ---------------------------------------------------------------------
     // PHASE A - parallel research: CRAWL + SERP

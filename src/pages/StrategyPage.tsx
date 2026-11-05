@@ -1,7 +1,13 @@
 import { useState } from 'react';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, FileCheck, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../lib/i18n';
+import {
+  LEADLOSS_MAX_FILE_BYTES,
+  isLeadLossFile,
+  parseLeadLossDiagnostic,
+  type LeadLossDiagnostic,
+} from '../lib/leadlossDiagnostic';
 
 const countries = [
   'United States', 'Canada', 'United Kingdom', 'France', 'Germany', 'Spain', 'Italy', 'Netherlands',
@@ -10,6 +16,11 @@ const countries = [
   'Malaysia', 'Thailand', 'Indonesia', 'Philippines', 'South Korea', 'Vietnam', 'UAE', 'Saudi Arabia',
   'South Africa', 'Egypt', 'Turkey',
 ];
+
+interface UploadedDiagnostic {
+  fileName: string;
+  diagnostic: LeadLossDiagnostic;
+}
 
 export function StrategyPage() {
   const navigate = useNavigate();
@@ -23,6 +34,8 @@ export function StrategyPage() {
     geographicMarket: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [uploaded, setUploaded] = useState<UploadedDiagnostic | null>(null);
+  const [uploadError, setUploadError] = useState('');
 
   const isValidUrl = (url: string) => {
     try {
@@ -49,12 +62,40 @@ export function StrategyPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleLeadLossUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!isLeadLossFile(file)) {
+      setUploadError(t('strategy.leadLoss.invalidType'));
+      return;
+    }
+    if (file.size > LEADLOSS_MAX_FILE_BYTES) {
+      setUploadError(t('strategy.leadLoss.tooLarge'));
+      return;
+    }
+    try {
+      const diagnostic = parseLeadLossDiagnostic(await file.text());
+      setUploaded({ fileName: file.name, diagnostic });
+      setUploadError('');
+    } catch {
+      setUploaded(null);
+      setUploadError(t('strategy.leadLoss.parseError'));
+    }
+  };
+
+  const removeLeadLoss = () => {
+    setUploaded(null);
+    setUploadError('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid()) return;
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 2000));
-    const encodedData = encodeURIComponent(JSON.stringify(formData));
+    const payload = { ...formData, leadLossDiagnostic: uploaded?.diagnostic ?? null };
+    const encodedData = encodeURIComponent(JSON.stringify(payload));
     navigate(`/strategy/${encodedData}`);
   };
 
@@ -192,6 +233,51 @@ export function StrategyPage() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="leadloss-diagnostic" className="block text-sm font-semibold text-gray-900 mb-1">
+                {t('strategy.leadLoss.label')}
+              </label>
+              <p className="text-sm text-gray-500 mb-3">{t('strategy.leadLoss.hint')}</p>
+              <input
+                type="file"
+                id="leadloss-diagnostic"
+                accept=".md,text/markdown"
+                onChange={handleLeadLossUpload}
+                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:bg-blue-50 file:text-blue-700 file:font-semibold hover:file:bg-blue-100 file:cursor-pointer cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl"
+              />
+              {uploadError && <p className="text-red-600 text-sm mt-2">{uploadError}</p>}
+
+              {uploaded && (
+                <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileCheck size={18} className="text-green-600 flex-shrink-0" />
+                      <span className="text-sm font-semibold text-gray-900 truncate">{uploaded.fileName}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removeLeadLoss}
+                      className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-red-600 transition-colors"
+                    >
+                      <X size={16} />
+                      {t('strategy.leadLoss.remove')}
+                    </button>
+                  </div>
+                  <p className="text-sm font-semibold text-green-800 mt-3">{t('strategy.leadLoss.detected')}</p>
+                  <ul className="text-sm text-gray-700 mt-2 space-y-1">
+                    <li>{t('strategy.leadLoss.frictions', { n: uploaded.diagnostic.frictions.length })}</li>
+                    {uploaded.diagnostic.conversionRate !== null && (
+                      <li>{t('strategy.leadLoss.conversion', { n: uploaded.diagnostic.conversionRate })}</li>
+                    )}
+                    {uploaded.diagnostic.estimatedRecovery !== null && (
+                      <li>{t('strategy.leadLoss.recovery', { n: uploaded.diagnostic.estimatedRecovery.toLocaleString() })}</li>
+                    )}
+                  </ul>
+                  <p className="text-xs text-gray-500 mt-3">{t('strategy.leadLoss.usage')}</p>
+                </div>
+              )}
             </div>
 
             <button
